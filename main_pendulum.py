@@ -2,16 +2,21 @@ import tensorflow as tf
 import gym
 import numpy as np
 from ddpg import *
+import time
+
+config = tf.ConfigProto(
+	device_count = {'GPU': 0}
+)
 
 # ===========================
 #   Utility Parameters
 # ===========================
 # Directory for storing gym results
-MONITOR_DIR = 'results/gym_ddpg'
+MONITOR_DIR = 'results/gym_ddpg_cpu'
 # Directory for storing tensorboard summary results
-SUMMARY_DIR = 'results/tf_ddpg'
+SUMMARY_DIR = 'results/tf_ddpg_cpu'
 
-RESPATH = 'results/pendulum_ddpg'
+RESPATH = 'results/pendulum_ddpg_cpu'
 
 # Render gym env during training
 
@@ -88,6 +93,7 @@ def train_ddpg(sess, env, actor, critic):
 	sum_rewards = []
 	avg_rewards = []
 	steps = []
+	elapsed_times = []
 
 	for i in xrange(MAX_EPISODES):
 
@@ -97,6 +103,8 @@ def train_ddpg(sess, env, actor, critic):
 		ep_avg_reward = 0
 		ep_ave_max_q = 0
 
+		
+		start_t = time.time()
 		for j in xrange(MAX_EP_STEPS):
 
 			if RENDER_ENV: 
@@ -158,19 +166,22 @@ def train_ddpg(sess, env, actor, critic):
 
 				writer.add_summary(summary_str, i)
 				writer.flush()
+				elapsed_t = time.time() - start_t
+				elapsed_times.append(elapsed_t)
 
 				print '| Step-to-target: %d' % (j+1), '| Reward: %.2i' % int(ep_sum_reward), " | Episode", i, \
-					'| Qmax: %.4f' % (ep_ave_max_q / float(j))
+					'| Qmax: %.4f' % (ep_ave_max_q / float(j)), ' Elapsed time : %.3fs'% elapsed_t
 
 				break
+		# end for j MAX_EP
 
 		steps.append((j+1))
 		sum_rewards.append(ep_sum_reward)
 		avg_rewards.append(ep_avg_reward)
 
-		np.save(RESPATH, (steps, sum_rewards, avg_rewards))
+		np.save(RESPATH, (steps, sum_rewards, avg_rewards, elapsed_times))
 
-with tf.Session() as sess:
+with tf.Session(config=config) as sess:
 	env = gym.make(ENV_NAME)
 	np.random.seed(RANDOM_SEED)
 	tf.set_random_seed(RANDOM_SEED)
