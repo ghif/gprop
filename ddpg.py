@@ -52,15 +52,23 @@ class ActorNetwork(object):
 
 	def create_actor_network(self):
 		_inputs = tflearn.input_data(shape=[None, self.state_dim])
-		_net = tflearn.fully_connected(_inputs, 400, activation='relu')
+		_inputs_bn = tflearn.batch_normalization(_inputs)
 
-		_net = tflearn.fully_connected(_net, 300, activation='relu')
+		_net = tflearn.fully_connected(_inputs_bn, 400)
+		_net = tflearn.batch_normalization(_net)
+		_net = tflearn.activation(_net, 'relu')
+
+		_net = tflearn.fully_connected(_net, 300)
+		_net = tflearn.batch_normalization(_net)
+		_net = tflearn.activation(_net, 'relu')
+
 		_w_init = tflearn.initializations.uniform(minval=-3e-3, maxval=3e-3)
 		# _out = tflearn.fully_connected(_net, self.action_dim, activation='tanh', weights_init=_w_init)
 		_out = tflearn.fully_connected(_net, self.action_dim, 
 				activation=self.a_output_activation, 
 				weights_init=_w_init) 
 		_scaled_out = tf.mul(_out, self.action_bound)
+
 		return _inputs, _out, _scaled_out
 
 	def train(self, state, a_gradient):
@@ -117,27 +125,34 @@ class CriticNetwork(object):
 
 		# define critic loss
 		self._loss = tflearn.mean_square(self._predicted_q_value, self._out)
-		self._optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self._loss)
+		self._optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self._loss)
 
 		# Get the gradient w.r.t. the action
 		self._action_grads = tf.gradients(self._out, self._action)
 
-	def create_critic_network(self):
+	def create_critic_network(self, l2w=1e-2):
 		_input = tflearn.input_data(shape=[None, self.state_dim])
+		_input_bn = tflearn.batch_normalization(_input)
+
 		_action = tflearn.input_data(shape=[None, self.action_dim])
-		_net = tflearn.fully_connected(_input, 400, activation='relu')
+
+		_net = tflearn.fully_connected(_input_bn, 400, weight_decay=l2w)
+		_net = tflearn.batch_normalization(_net)
+		_net = tflearn.activation(_net, 'relu')
 
 		# Add the action tensor in the 2nd hidden layer
 		# Use two temp layers to get the corresponding weights and biases
-		t1 = tflearn.fully_connected(_net, 300)
-		t2 = tflearn.fully_connected(_action, 300)
+		t1 = tflearn.fully_connected(_net, 300, weight_decay=l2w)
+		t2 = tflearn.fully_connected(_action, 300, weight_decay=l2w)
 
 
-		_net = tflearn.activation(tf.matmul(_net, t1.W) + tf.matmul(_action, t2.W) + t2.b, activation='relu')
+		_net = tflearn.activation(tf.matmul(_net, t1.W) + tf.matmul(_action, t2.W) + t2.b)
+		_net = tflearn.batch_normalization(_net)
+		_net = tflearn.activation(_net, 'relu')
 
 		# linear output layer
 		_w_init = tflearn.initializations.uniform(minval=-3e-3, maxval=3e-3)
-		_out = tflearn.fully_connected(_net, 1, weights_init=_w_init)
+		_out = tflearn.fully_connected(_net, 1, weights_init=_w_init, weight_decay=1e-2)
 		return _input, _action, _out
 
 	def train(self, state, action, predicted_q_value):

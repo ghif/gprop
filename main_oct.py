@@ -7,21 +7,17 @@ from ddpg import *
 
 import sys
 
-config = tf.ConfigProto(
-         device_count = {'GPU': 0}
-)
-
+import time
 
 # ===========================
 #   Utility Parameters
 # ==========================='
 # Directory for storing tensorboard summary results
-SUMMARY_DIR = 'results/tf_oct_ddpg_v2'
+SUMMARY_DIR = 'results/tf_oct_ddpg_v3'
 
-RESPATH = 'results/oct_ddpg_v2'
+RESPATH = 'results/oct_ddpg_v3'
 
 # Render gym env during training
-
 
 # ==========================
 #   Training Parameters
@@ -29,14 +25,13 @@ RESPATH = 'results/oct_ddpg_v2'
 # Base learning rate for the Actor network
 ACTOR_LEARNING_RATE = 1e-4
 # Base learning rate for the Critic Network
-CRITIC_LEARNING_RATE = 3e-4
+CRITIC_LEARNING_RATE = 1e-3
 
 # Soft target update param
 TAU = 1e-3
 
-
 # Size of replay buffer
-BUFFER_SIZE = 10000
+BUFFER_SIZE = 1e6
 MINIBATCH_SIZE = 64
 RANDOM_SEED = 1234
 # Discount factor 
@@ -49,7 +44,7 @@ MAX_EP_STEPS = 300
 # MAX_TOT_STEPS = 30000
 
 
-SIGMA = 0.1 # variance of the exploration
+SIGMA = 0.5 # variance of the exploration
 REW_GAIN = 1
 # REW_GAIN = 50
 
@@ -122,6 +117,9 @@ def train_ddpg(sess, envr, actor, critic):
 	sum_rewards = []
 	avg_rewards = []
 	steps = []
+	sum_q = []
+	sum_max_q = []
+	elapsed_times = []
 
 	for i in range(MAX_EPISODES):
 		env.send_str('START')
@@ -133,7 +131,6 @@ def train_ddpg(sess, envr, actor, critic):
 		# get state (s_t) and compute action (a_t)
 		# print(data)
 		s = map(float, data[2:])
-
 		
 		s = np.array(s)
 		# print('state : ', s)
@@ -148,17 +145,19 @@ def train_ddpg(sess, envr, actor, critic):
 		ep_avg_max_q = 0.
 		ep_sum_avg_q = 0.
 		
-
-
 		step_counter = 0
-		while not terminal:
 
+		start_t = time.time()
+
+		while not terminal:
 			step_counter += 1
 
 			# compute action with exploration noise
 			mu = actor.predict(np.reshape(s, (1, s.shape[0])))
 			mu = np.reshape(mu, (mu.shape[1], ))
-			a = mu + np.random.randn(envr.dim_action) * SIGMA
+			epsilon = np.random.randn(envr.dim_action)
+			factor = SIGMA / step_counter
+			a = mu + factor * epsilon
 
 			# print('det. action (',mu.shape,') : ', mu)
 			# print('action : ', a)
@@ -174,9 +173,7 @@ def train_ddpg(sess, envr, actor, critic):
 			s2 = np.array(s2)
 
 			terminal = int(data[1])
-
 			
-
 			# compute reward
 			closest_distance = min_dist_to_target(s, envr.target_x, envr.target_y)
 			new_closest_distance = min_dist_to_target(s2, envr.target_x, envr.target_y)
@@ -187,10 +184,8 @@ def train_ddpg(sess, envr, actor, critic):
 
 			if not terminal:
 				# positive, when the end-of-arm is closer to target
-
 				# r = REW_GAIN * (closest_distance - new_closest_distance)
-
-				if new_closest_distance < closest_distance:
+				if (new_closest_distance + 1e-2) < closest_distance:
 					r = 1
 				else:
 					r = -1
@@ -207,9 +202,7 @@ def train_ddpg(sess, envr, actor, critic):
 					else:
 						r = -1
 
-				
 				# print(data)
-
 
 			# print('(cd, ncd, r) : (%.2f, %.2f, %f)' % (closest_distance, new_closest_distance, r))
 
@@ -233,6 +226,7 @@ def train_ddpg(sess, envr, actor, critic):
 
 				# Update the critic given the targets
 				predicted_q_value, _ = critic.train(s_batch, a_batch, np.reshape(y_i, (MINIBATCH_SIZE, 1)))
+				# print(predicted_q_value)
 
 				ep_sum_avg_q += np.average(predicted_q_value)
 				ep_sum_max_q += np.amax(predicted_q_value)
@@ -264,18 +258,27 @@ def train_ddpg(sess, envr, actor, critic):
 
 				# writer.add_summary(summary_str, i)
 				# writer.flush()
+				elapsed_t = time.time() - start_t
+				elapsed_times.append(elapsed_t)
+
 				steps.append(step_counter)
 				print '| Step-to-target: %d' % step_counter, ' Total step : %d' % np.sum(steps), ' | Reward: %.2i' % int(ep_sum_reward), " | Episode", i, \
-					'Q: %.4f' % ep_sum_avg_q,  '| Qmax: %.4f' % ep_avg_max_q
+					'| Q: %.4f' % ep_sum_avg_q,  '| Qmax: %.4f' % ep_avg_max_q, '| Elapsed time: %.1fs' % elapsed_t
 
 				break
+		# end while not terminal
 
 		sum_rewards.append(ep_sum_reward)
 		avg_rewards.append(ep_avg_reward)
 
-		np.save(RESPATH, (steps, sum_rewards, avg_rewards))
+		sum_q.append(ep_sum_avg_q)
+		sum_max_q.append(ep_avg_max_q)
 
-with tf.Session(config=config) as sess:
+
+		np.save(RESPATH, (steps, sum_rewards, avg_rewards, sum_q, sum_max_q, elapsed_times))
+	# end for i MAX_EPISODES
+
+with tf.Session() as sess:
 	# env = gym.make(ENV_NAME)
 	envr = env.OctopusArm()
 	print(envr)
