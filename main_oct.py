@@ -46,7 +46,7 @@ MAX_EP_STEPS = 300
 # MAX_TOT_STEPS = 30000
 
 
-SIGMA = 0.15 # variance of the exploration
+SIGMA = 0.3 # variance of the exploration
 REW_GAIN = 1
 # REW_GAIN = 50
 
@@ -143,6 +143,8 @@ def train_ddpg(sess, envr, actor, critic):
 
 		ep_sum_max_q = 0,
 		ep_avg_max_q = 0.
+		ep_sum_avg_q = 0.
+		
 
 
 		step_counter = 0
@@ -173,7 +175,7 @@ def train_ddpg(sess, envr, actor, critic):
 			
 
 			# compute reward
-			# closest_distance = min_dist_to_target(s, envr.target_x, envr.target_y)
+			closest_distance = min_dist_to_target(s, envr.target_x, envr.target_y)
 			new_closest_distance = min_dist_to_target(s2, envr.target_x, envr.target_y)
 
 			if start_flag:
@@ -182,7 +184,13 @@ def train_ddpg(sess, envr, actor, critic):
 
 			if not terminal:
 				# positive, when the end-of-arm is closer to target
-				r = REW_GAIN * (closest_distance - new_closest_distance)
+
+				# r = REW_GAIN * (closest_distance - new_closest_distance)
+
+				if new_closest_distance < closest_distance:
+					r = 1
+				else:
+					r = -1
 				# print('---', data)
 
 			else: #hitting the target
@@ -190,7 +198,11 @@ def train_ddpg(sess, envr, actor, critic):
 					r = float(data[2])
 					print('-- hit the target (r = %f) ' % r)
 				else:
-					r = REW_GAIN * (closest_distance - new_closest_distance)
+					# r = REW_GAIN * (closest_distance - new_closest_distance)
+					if new_closest_distance < closest_distance:
+						r = 1
+					else:
+						r = -1
 
 				
 				# print(data)
@@ -219,6 +231,7 @@ def train_ddpg(sess, envr, actor, critic):
 				# Update the critic given the targets
 				predicted_q_value, _ = critic.train(s_batch, a_batch, np.reshape(y_i, (MINIBATCH_SIZE, 1)))
 
+				ep_sum_avg_q += np.average(predicted_q_value)
 				ep_sum_max_q += np.amax(predicted_q_value)
 				ep_avg_max_q = ep_sum_max_q / step_counter
 
@@ -250,7 +263,7 @@ def train_ddpg(sess, envr, actor, critic):
 				# writer.flush()
 				steps.append(step_counter)
 				print '| Step-to-target: %d' % step_counter, ' Total step : %d' % np.sum(steps), ' | Reward: %.2i' % int(ep_sum_reward), " | Episode", i, \
-					'| Qmax: %.4f' % ep_avg_max_q
+					'Q: %.4f' % ep_sum_avg_q,  '| Qmax: %.4f' % ep_avg_max_q
 
 				break
 
