@@ -7,6 +7,9 @@ from ddpg import *
 
 import sys
 
+config = tf.ConfigProto(
+         device_count = {'GPU': 0}
+)
 
 
 # ===========================
@@ -24,12 +27,12 @@ RESPATH = 'results/oct_ddpg_v2'
 #   Training Parameters
 # ==========================
 # Base learning rate for the Actor network
-ACTOR_LEARNING_RATE = 0.0001
+ACTOR_LEARNING_RATE = 1e-4
 # Base learning rate for the Critic Network
-CRITIC_LEARNING_RATE = 0.001
+CRITIC_LEARNING_RATE = 3e-4
 
 # Soft target update param
-TAU = 0.001
+TAU = 1e-3
 
 
 # Size of replay buffer
@@ -46,7 +49,7 @@ MAX_EP_STEPS = 300
 # MAX_TOT_STEPS = 30000
 
 
-SIGMA = 0.3 # variance of the exploration
+SIGMA = 0.1 # variance of the exploration
 REW_GAIN = 1
 # REW_GAIN = 50
 
@@ -272,7 +275,7 @@ def train_ddpg(sess, envr, actor, critic):
 
 		np.save(RESPATH, (steps, sum_rewards, avg_rewards))
 
-with tf.Session() as sess:
+with tf.Session(config=config) as sess:
 	# env = gym.make(ENV_NAME)
 	envr = env.OctopusArm()
 	print(envr)
