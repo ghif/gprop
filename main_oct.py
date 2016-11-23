@@ -9,13 +9,18 @@ import sys
 
 import time
 
+config = tf.ConfigProto(
+	device_count = {'GPU': 0}
+)
+
+
 # ===========================
 #   Utility Parameters
 # ==========================='
 # Directory for storing tensorboard summary results
-SUMMARY_DIR = 'results/tf_oct_ddpg_v3'
+SUMMARY_DIR = 'results/tf_oct_ddpg_v7'
 
-RESPATH = 'results/oct_ddpg_v3'
+RESPATH = 'results/oct_ddpg_v7'
 
 # Render gym env during training
 
@@ -42,10 +47,11 @@ MAX_EPISODES = 50000
 # Max episode length
 MAX_EP_STEPS = 300
 # MAX_TOT_STEPS = 30000
+MAX_STEP_COUNTER = 300000
 
 
-SIGMA = 0.5 # variance of the exploration
-REW_GAIN = 1
+SIGMA = 3. # variance of the exploration
+REW_GAIN = 30
 # REW_GAIN = 50
 
 def min_dist_to_target(state, x_target, y_target):
@@ -147,6 +153,7 @@ def train_ddpg(sess, envr, actor, critic):
 		
 		step_counter = 0
 
+
 		start_t = time.time()
 
 		while not terminal:
@@ -159,8 +166,10 @@ def train_ddpg(sess, envr, actor, critic):
 			factor = SIGMA / step_counter
 			a = mu + factor * epsilon
 
-			# print('det. action (',mu.shape,') : ', mu)
-			# print('action : ', a)
+			# # print('det. action (',mu.shape,') : ', mu)
+			# print('state_t', s)
+			# print('det action_t : ', mu)
+			# print('action_t : ', a)
 		
 			# compute next state
 			env.send_str('STEP')
@@ -182,28 +191,18 @@ def train_ddpg(sess, envr, actor, critic):
 				closest_distance = new_closest_distance
 				start_flag = False
 
-			if not terminal:
-				# positive, when the end-of-arm is closer to target
-				# r = REW_GAIN * (closest_distance - new_closest_distance)
-				if (new_closest_distance + 1e-2) < closest_distance:
-					r = 1
-				else:
-					r = -1
-				# print('---', data)
+			r = REW_GAIN * (closest_distance - new_closest_distance) # non-hit reward
 
-			else: #hitting the target
+			# if (new_closest_distance + 1e-2) < closest_distance:
+			# 	r = 1
+			# else:
+			# 	r = -1
+
+			if terminal: #hitting the target
 				if step_counter < MAX_EP_STEPS:
 					r = float(data[2])
 					print('-- hit the target (r = %f) ' % r)
-				else:
-					# r = REW_GAIN * (closest_distance - new_closest_distance)
-					if new_closest_distance < closest_distance:
-						r = 1
-					else:
-						r = -1
-
-				# print(data)
-
+			
 			# print('(cd, ncd, r) : (%.2f, %.2f, %f)' % (closest_distance, new_closest_distance, r))
 
 			replay_buffer.add(np.reshape(s, (actor.state_dim,)), np.reshape(a, (actor.action_dim,)), r, \
@@ -276,16 +275,19 @@ def train_ddpg(sess, envr, actor, critic):
 
 
 		np.save(RESPATH, (steps, sum_rewards, avg_rewards, sum_q, sum_max_q, elapsed_times))
+
+		if np.sum(steps) > MAX_STEP_COUNTER:
+			break;
 	# end for i MAX_EPISODES
 
-with tf.Session() as sess:
+with tf.Session(config=config) as sess:
 	# env = gym.make(ENV_NAME)
 	envr = env.OctopusArm()
 	print(envr)
 
 
-	np.random.seed(RANDOM_SEED)
-	tf.set_random_seed(RANDOM_SEED)
+	# np.random.seed(RANDOM_SEED)
+	# tf.set_random_seed(RANDOM_SEED)
 	# env.seed(RANDOM_SEED)
 
 	# state_dim = env.observation_space.shape[0]
@@ -297,7 +299,7 @@ with tf.Session() as sess:
 	action_bound = 1.
 
 	actor = ActorNetwork(sess, state_dim, action_dim, action_bound, 
-		ACTOR_LEARNING_RATE, TAU, a_output_activation='relu')
+		ACTOR_LEARNING_RATE, TAU, a_output_activation='sigmoid')
 
 	critic = CriticNetwork(sess, state_dim, action_dim, 
 		CRITIC_LEARNING_RATE, TAU, actor.get_num_trainable_vars())

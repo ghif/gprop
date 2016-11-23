@@ -10,10 +10,10 @@ from threading import Thread
 
 LINE_SEPARATOR = '\n'
 BUF_SIZE = 4096 #in bytes
-PORT = 32000 #default: 8888
+PORT = 3200 #default: 8888
 #PORT = 8888
-# MODE = 'external_gui' # with visualization
-MODE = 'external' # without visualization
+MODE = 'external_gui' # with visualization
+# MODE = 'external' # without visualization
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -23,8 +23,11 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 envpath = 'rl-framework/environments' 
 
 xmlconf = 'settings1.xml'
-#xmlstate = 'initialStates_gif.xml'
-xmlstate = 'initialStates.xml'
+
+
+xmlstate = 'initialStates_gif.xml'
+# xmlstate = 'initialStates_present.xml'
+# xmlstate = 'initialStates.xml'
 
 def connect(host='localhost', port=PORT):
 	try:
